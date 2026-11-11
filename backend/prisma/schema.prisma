@@ -1,0 +1,232 @@
+// Prisma Client Generator
+generator client {
+  provider = "prisma-client-js"
+}
+
+// PostgreSQL Database
+datasource db {
+  provider = "postgresql"
+}
+
+// Role Enum
+enum Role {
+  ADMIN
+  HOD
+  MENTOR
+  STUDENT
+  MENTEE
+  PARENT
+}
+
+// Priority Enum
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+// Complaint Status Enum
+enum ComplaintStatus {
+  OPEN
+  IN_REVIEW
+  RESOLVED
+  REJECTED
+}
+
+// Session Status Enum
+enum SessionStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  RESCHEDULED
+}
+
+// User Model
+model User {
+  id          String   @id @default(uuid())
+  name        String
+  username    String?  @unique
+  email       String   @unique
+  password    String   @default("$2a$10$e84WvIeA/1iZfB9jJmG37eq6GzT6a3Cq.9tG7/1iZfB9jJmG37eq6") // default: password123
+  role        Role     @default(STUDENT)
+  phone       String?
+  avatar      String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+
+  mentorProfile  MentorProfile?
+  studentProfile StudentProfile?
+  parentProfile  ParentProfile?
+  hodProfile     HODProfile?
+
+  complaints    Complaint[]    @relation("UserComplaints")
+  notifications Notification[]
+}
+
+// Department Model
+model Department {
+  id        String   @id @default(uuid())
+  name      String
+  code      String   @unique // e.g. "CSE", "ECE", "IT", "ME", "CE"
+  hodName   String?
+  createdAt DateTime @default(now())
+
+  users    User[]
+  mentors  MentorProfile[]
+  students StudentProfile[]
+}
+
+// Mentor Profile
+model MentorProfile {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  designation String   @default("Assistant Professor")
+  cabin       String?  @default("Faculty Block")
+  expertise   String[]
+  bio         String?
+  maxCapacity Int      @default(20)
+  createdAt   DateTime @default(now())
+
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+
+  assignedStudents StudentProfile[]  @relation("MentorMentees")
+  sessions         Session[]
+  feedbacks        MonthlyFeedback[]
+}
+
+// Student Profile (Mentee)
+model StudentProfile {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rollNo      String   @unique
+  semester    Int      @default(1)
+  cgpa        Float    @default(8.0)
+  attendance  Float    @default(85.0)
+  backlogs    Int      @default(0)
+  isDefaulter Boolean  @default(false)
+  interests   String[]
+  createdAt   DateTime @default(now())
+
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+
+  mentorId String?
+  mentor   MentorProfile? @relation("MentorMentees", fields: [mentorId], references: [id])
+
+  parentId String?
+  parent   ParentProfile? @relation("ParentStudent", fields: [parentId], references: [id])
+
+  sessions  Session[]
+  feedbacks MonthlyFeedback[]
+  goals     StudentGoal[]
+}
+
+// Parent Profile
+model ParentProfile {
+  id               String   @id @default(uuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  occupation       String?
+  emergencyContact String?
+  createdAt        DateTime @default(now())
+
+  students StudentProfile[] @relation("ParentStudent")
+}
+
+// HOD Profile
+model HODProfile {
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  departmentCode String?
+  cabin          String?
+  createdAt      DateTime @default(now())
+}
+
+// Session / Meeting Model
+model Session {
+  id          String        @id @default(uuid())
+  title       String
+  agenda      String?
+  date        DateTime
+  location    String?       @default("Faculty Cabin")
+  status      SessionStatus @default(SCHEDULED)
+  notes       String?       // Minutes of Meeting (MoM)
+  actionItems String[]      @default([])
+  feedback    String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  mentorId  String
+  mentor    MentorProfile  @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+}
+
+// Monthly Feedback / Appraisal Model
+model MonthlyFeedback {
+  id                  String   @id @default(uuid())
+  month               String   // e.g. "November 2026"
+  academicRating      Int      @default(5)
+  behaviouralRating   Int      @default(5)
+  personalDevRating   Int      @default(5)
+  remarks             String
+  parentAcknowledged  Boolean  @default(false)
+  createdAt           DateTime @default(now())
+
+  mentorId  String
+  mentor    MentorProfile  @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+}
+
+// Complaints / Grievance Model
+model Complaint {
+  id              String          @id @default(uuid())
+  category        String          // Academics, Mentor, Infrastructure, Personal
+  subject         String
+  description     String
+  priority        Priority        @default(MEDIUM)
+  status          ComplaintStatus @default(OPEN)
+  adminResolution String?
+  resolvedAt      DateTime?
+  createdAt       DateTime        @default(now())
+
+  userId String
+  user   User   @relation("UserComplaints", fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Student Goal Model
+model StudentGoal {
+  id          String    @id @default(uuid())
+  title       String
+  category    String    // Academics, Skills, Placement, Projects
+  targetDate  DateTime?
+  isCompleted Boolean   @default(false)
+  progress    Int       @default(0) // 0-100%
+  createdAt   DateTime  @default(now())
+
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+}
+
+// Notification Model
+model Notification {
+  id        String   @id @default(uuid())
+  title     String
+  message   String
+  type      String   @default("INFO") // INFO, WARNING, ALERT, SUCCESS
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
